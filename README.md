@@ -1,192 +1,244 @@
-<div align="center">
-  <img src="https://raw.githubusercontent.com/doccano/doccano/master/docs/images/logo/doccano.png">
-</div>
+# Sowi Stuttgart CSS Lab Annotation Pipeline 
 
-# doccano
+**Table of contents**
 
-[![Codacy Badge](https://app.codacy.com/project/badge/Grade/35ac8625a2bc4eddbff23dbc61bc6abb)](https://www.codacy.com/gh/doccano/doccano/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=doccano/doccano&amp;utm_campaign=Badge_Grade)
-[![doccano CI](https://github.com/doccano/doccano/actions/workflows/ci.yml/badge.svg)](https://github.com/doccano/doccano/actions/workflows/ci.yml)
+- [Summary](#summary)
+- [Initial server configuration](#initial-server-configuration)
+- [Get doccano running](#get-doccano-running)
+- [Get doccano running simultaneaously with the Open Discourse database](#get-doccano-running-simultaneaously-with-the-open-discourse-database)
+  - [Get the Open Discourse database](#get-the-open-discourse-database)
+  - [Start with custom docker-compose yaml](#start-with-custom-docker-compose-yaml)
+  - [Notes:](#notes-)
+- [Retreive data](#retreive-data)
 
-doccano is an open source text annotation tool for humans. It provides annotation features for text classification, sequence labeling and sequence to sequence tasks. So, you can create labeled data for sentiment analysis, named entity recognition, text summarization and so on. Just create a project, upload data and start annotating. You can build a dataset in hours.
+## Summary
 
-## Demo
+This repository contains files and documentation to set up an annotation pipeline for machine learning on the bwcloud OpenStack server.
 
-You can try the [annotation demo](http://doccano.herokuapp.com).
+Access information, credentials, and private key-file are stored on the S7 network storage `/Projekte/BWCloudServer/`
 
-![Demo image](https://raw.githubusercontent.com/doccano/doccano/master/docs/images/demo/demo.gif)
+The annotation server hosts the **doccano** annotation tool (https://github.com/doccano/doccano) and a **PostgreSQL** database. 
+Doccano can be accessed via web browser under the known IP-adress. Database access is described in the `readme.md` in this repository in the folder `./scripts/`.
 
-## Documentation
+To set up the annotation server from scratch, follow the subsequent steps...
+The basic useage of the bwCloud is described https://www.bw-cloud.org/de/erste_schritte and here https://uweremer.github.io/css_server_setup/. 
 
-Read the documentation at the <https://doccano.github.io/doccano/>.
+Be aware: “With great power comes great responsibility”! You have root rights for your own instances. Everybody is responsible (and liable) for his/her own instance. The insatance is exposed in the internet, so take appropriate measures to **secure your server!**
 
-## Features
 
-- Collaborative annotation
-- Multi-language support
-- Mobile support
-- Emoji :smile: support
-- Dark theme
-- RESTful API
+## Initial server configuration
 
-## Usage
+Build an OpenStack instance, e.g., with the *OpenSUSE Leap 15.3 JeOS* image and login with ssh.
 
-Three options to run doccano:
+First, automate updates to receive security updates when necessary. Select at least weekly security updates.
 
-- pip (Python 3.8+)
-- Docker
-- Docker Compose
-
-### pip
-
-To install doccano, simply run:
-
-```bash
-pip install doccano
+```
+sudo zypper install yast2-online-update-configuration
+sudo yast2 online_update_configuration
 ```
 
-By default, SQLite 3 is used for the default database. If you want to use PostgreSQL, install the additional dependencies:
+As the *JeOS* (Just enough operating system) version of OpenSUSE is a minimal installation, we need to add some basic packages:
 
-```bash
-pip install 'doccano[postgresql]'
+- nano
+- tmux
+- git 
+- docker
+- docker-compose
+
+```
+sudo zypper install [package]
+```
+Start docker service:
+```
+sudo systemctl status docker
+sudo systemctl start docker
 ```
 
-and set `DATABASE_URL` environment variable according to your PostgreSQL credentials:
+Make docker service start on startup:
 
-```bash
-DATABASE_URL="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}?sslmode=disable"
+```
+sudo systemctl enable docker.service
+sudo systemctl enable containerd.service
 ```
 
-After installation, run the following commands:
 
-```bash
-# Initialize database.
-doccano init
-# Create a super user.
-doccano createuser --username admin --password pass
-# Start a web server.
-doccano webserver --port 8000
+## Get doccano running
+
+For the comprehensive doccano documentation see https://doccano.github.io/doccano/
+
+We use a docker container to deploy doccano on the server. First, clone the doccano repository from github with git. 
+
 ```
-
-In another terminal, run the following command:
-
-```bash
-# Start the task queue to handle file upload/download.
-doccano task
-```
-
-Go to <http://127.0.0.1:8000/>.
-
-### Docker
-
-As a one-time setup, create a Docker container as follows:
-
-```bash
-docker pull doccano/doccano
-docker container create --name doccano \
-  -e "ADMIN_USERNAME=admin" \
-  -e "ADMIN_EMAIL=admin@example.com" \
-  -e "ADMIN_PASSWORD=password" \
-  -v doccano-db:/data \
-  -p 8000:8000 doccano/doccano
-```
-
-Next, start doccano by running the container:
-
-```bash
-docker container start doccano
-```
-
-Go to <http://127.0.0.1:8000/>.
-
-To stop the container, run `docker container stop doccano -t 5`. All data created in the container will persist across restarts.
-
-If you want to use the latest features, please specify `nightly` tag:
-
-```bash
-docker pull doccano/doccano:nightly
-```
-
-### Docker Compose
-
-You need to install Git and to clone the repository:
-
-```bash
 git clone https://github.com/doccano/doccano.git
-cd doccano
 ```
 
-_Note for Windows developers:_ Be sure to configure git to correctly handle line endings or you may encounter `status code 127` errors while running the services in future steps. Running with the git config options below will ensure your git directory correctly handles line endings.
+Next, we store our own configuration parameters in the `.env` file under path `./doccano/docker/` (by copying and customizing the `.env.example`)
 
-```bash
-git clone https://github.com/doccano/doccano.git --config core.autocrlf=input
+```
+cd doccano/docker/
+cp .env.example .env
+nano .env
 ```
 
-Then, create an `.env` file with variables in the following format (see [./docker/.env.example](https://github.com/doccano/doccano/blob/master/docker/.env.example)):
+The actual configuration of the productive environment is stored on the S7 network storage `./Projekte/BWCloudServer/`.
 
-```plain
-# platform settings
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=password
-ADMIN_EMAIL=admin@example.com
+Now, we can initialize the doccano container:
 
-# rabbit mq settings
-RABBITMQ_DEFAULT_USER=doccano
-RABBITMQ_DEFAULT_PASS=doccano
-
-# database settings
-POSTGRES_USER=doccano
-POSTGRES_PASSWORD=doccano
-POSTGRES_DB=doccano
+```
+sudo docker-compose -f docker-compose.prod.yml --env-file .env up
 ```
 
-After running the following command, access <http://127.0.0.1/>.
+Alternatively, if we use `tmux`, we can start the process in background shell session:
 
-```bash
-docker-compose -f docker/docker-compose.prod.yml --env-file .env up
+```
+tmux new -s SESSIONNAME # starts new shell session
+sudo docker-compose -f docker-compose.prod.yml --env-file .env up
+```
+Then press <kbd>Ctrl</kbd> + <kbd>B</kbd> <kbd>d</kbd> to leave session.
+
+Now we can access the doccano annotation tools via web browser.
+
+To stop the conatiner execute:
+```
+sudo docker-compose -f docker-compose.prod.yml down 
 ```
 
-### One-click Deployment
+## Get doccano running simultaneaously with the Open Discourse database
 
-| Service | Button |
-|---------|---|
-| AWS[^1]   | [![AWS CloudFormation Launch Stack SVG Button](https://cdn.rawgit.com/buildkite/cloudformation-launch-stack-button-svg/master/launch-stack.svg)](https://console.aws.amazon.com/cloudformation/home?#/stacks/new?stackName=doccano&templateURL=https://doccano.s3.amazonaws.com/public/cloudformation/template.aws.yaml)  |
-| Heroku  | [![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://dashboard.heroku.com/new?template=https%3A%2F%2Fgithub.com%2Fdoccano%2Fdoccano)  |
-<!-- | GCP[^2] | [![GCP Cloud Run PNG Button](https://storage.googleapis.com/gweb-cloudblog-publish/images/run_on_google_cloud.max-300x300.png)](https://console.cloud.google.com/cloudshell/editor?shellonly=true&cloudshell_image=gcr.io/cloudrun/button&cloudshell_git_repo=https://github.com/doccano/doccano.git&cloudshell_git_branch=CloudRunButton)  | -->
+To be able to use the [Open Discourse](https://opendiscourse.de/) database on parliamentary speeches of the German Bundestag together with the doccano server, we need to adapt the deployment process.
 
-> [^1]: (1) EC2 KeyPair cannot be created automatically, so make sure you have an existing EC2 KeyPair in one region. Or [create one yourself](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html#having-ec2-create-your-key-pair). (2) If you want to access doccano via HTTPS in AWS, here is an [instruction](https://github.com/doccano/doccano/wiki/HTTPS-setting-for-doccano-in-AWS).
-<!-- > [^2]: Although this is a very cheap option, it is only suitable for very small teams (up to 80 concurrent requests). Read more on [Cloud Run docs](https://cloud.google.com/run/docs/concepts). -->
+The Open Discourse database is available as prefilled PostgreSQL database docker container.
 
-## FAQ
+As doccano and the Open Discourse docker container both start postges as a service, we need to adapt the docker-compose yaml files. The goal is to arrive at a single PostgreSQL instance, which contains the OpenDiscourse database but also the doccano database.  
 
-- [How to create a user](https://doccano.github.io/doccano/faq/#how-to-create-a-user)
-- [How to add a user to your project](https://doccano.github.io/doccano/faq/#how-to-add-a-user-to-your-project)
-- [How to change the password](https://doccano.github.io/doccano/faq/#how-to-change-the-password)
+### Get the Open Discourse database
 
-See the [documentation](https://doccano.github.io/doccano/) for details.
+The documentation on how to setup the Open Discourse database locally can be found [here](https://open-discourse.github.io/open-discourse-documentation/1.1.0/run-the-database-locally.html).
 
-## Contribution
+The docker image is provided via *ghcr.io* (github container registry). To access containers from ghcr.io, we need a github account and a personal github token with permisison to `read:packages` (see [github documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)).
 
-As with any software, doccano is under continuous development. If you have requests for features, please file an issue describing your request. Also, if you want to see work towards a specific feature, feel free to contribute by working towards it. The standard procedure is to fork the repository, add a feature, fix a bug, then file a pull request that your changes are to be merged into the main repository and included in the next release.
+After generating this token, we store it in a `.credentials` file and use it to login to ghcr.io (don't forget to provide *your* USERNAME):
 
-Here are some tips might be helpful. [How to Contribute to Doccano Project](https://github.com/doccano/doccano/wiki/How-to-Contribute-to-Doccano-Project)
-
-## Citation
-
-```tex
-@misc{doccano,
-  title={{doccano}: Text Annotation Tool for Human},
-  url={https://github.com/doccano/doccano},
-  note={Software available from https://github.com/doccano/doccano},
-  author={
-    Hiroki Nakayama and
-    Takahiro Kubo and
-    Junya Kamura and
-    Yasufumi Taniguchi and
-    Xu Liang},
-  year={2018},
-}
+```
+cd ~
+nano .credentials # insert token ghp_... 
+cat .credentials | docker login ghcr.io -u USERNAME --password-stdin
 ```
 
-## Contact
+Then we are able to pull the docker image:
 
-For help and feedback, please feel free to contact [the author](https://github.com/Hironsan).
+```
+docker pull ghcr.io/open-discourse/open-discourse/database:latest
+```
+
+If we were only interested in the database (without having a doccano environment), we could just follow the Open Discourse documentation and start the container: 
+
+```
+docker run --env POSTGRES_USER=postgres --env POSTGRES_DB=postgres --env POSTGRES_PASSWORD=postgres  -p 5432:5432 -d ghcr.io/open-discourse/open-discourse/database
+```
+
+Now we can explore the data (e.g. via [pgAdmin](https://www.pgadmin.org/) or in R with the package [RPostgreSQL](https://cran.r-project.org/web/packages/RPostgreSQL/index.html) ([see section 'retreive data'](#retreive-data)).
+
+
+### Start with custom docker-compose yaml
+
+But if we want to have doccano and Open Discourse on the same postgres instance, we need to adapt the deployment procedure as follows:
+
+We copy the customized docker yaml files from this repository [/docker_yaml/](/docker_yaml/) to the docker path of the doccano folders `./doccano/docker/`. 
+
+
+```
+cp ./annotation_pipeline/docker_yaml/* ./doccano/docker/
+cd doccano/docker/
+```
+
+First, we need do start the Open Discourse container, as it provides also a PostgreSQL service within the image. The corresponding yaml file is [/docker_yaml/docker-compose.od_db.yml](/docker_yaml/docker-compose.od_db.yml).
+
+Additionaly, we need to provide the `.env` file (already mentioned above).
+
+```
+sudo docker-compose -f docker-compose.od_db.yml --env-file .env up
+```
+
+Now we can access the PostgreSQL Server via pgAdmin, or R, or Python...
+
+To properly shut down the service:
+``` 
+sudo docker-compose -f docker-compose.od_db.yml down
+```
+
+Before we can star the doccano container, we have to initialize the doccano *database*, so that the docker-compse command for the doccano container finds a database that is ready to be populated. For now, I just create the `doccano` database via the pgAdmin on the database server we just created.
+
+Then we start the doccano container with docker-compose:
+
+```
+sudo docker-compose -f docker-compose.doccano.yml --env-file .env up
+#sudo docker-compose -f docker-compose.doccano.yml --env-file .env down
+```
+
+### Notes:
+
+To have a clean setup, make sure that the persistent docker volumes are newly initialized. But be aware: do not prune the volumes if they already contain productive data. Make sure to hava a backup of the data! 
+
+Hard reset of docker:
+```
+sudo systemctl restart docker
+docker system prune -a 
+docker volume prune
+```
+
+
+## Retreive data 
+
+See how to retreive data from the database with R and the packages [DBI](https://cran.r-project.org/web/packages/DBI/index.html) [RPostgres](https://cran.r-project.org/web/packages/RPostgres/index.html): 
+
+```
+# Install dependencies
+install.packages("DBI")
+library(DBI)
+install.packages("RPostgres")
+library(RPostgres)
+```
+
+Now we can create a connection to the database (remember to connect to the university network via VPN).
+Please get the credentials from the `.env` file.
+
+```
+#dbname 'next' contains the opendiscourse data
+con <- dbConnect(Postgres(),dbname = 'next',  
+                 host = '$HOST_IP',
+                 port = 5432,
+                 user = '$POSTGRES_USER',
+                 password = 'POSTGRES_PASSWORD',
+                 options='-c search_path=open_discourse')
+```
+
+
+Now we can display the existing tables for this connected database:
+
+```
+dbListTables(con)
+```
+
+Or display the existing fields for a specific table in the database:
+
+```
+dbListFields(con, "speeches")
+```
+
+And we can download the whole table from the database into a dataframe:
+
+```
+# Do not run! 920000 rows, 13 cols
+#wahlen <- dbReadTable(con, "speeches")
+```
+
+Of course we could do SQL queries...
+```
+query <-  dbSendQuery(con, "SELECT * FROM speeches WHERE
+                    speeches.last_name = 'merkel' ")
+df_neu <- dbFetch(query)
+head(df_neu)
+dbClearResult(query)
+```
+
